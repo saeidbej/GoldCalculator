@@ -69,7 +69,9 @@ calc();
 }catch(e){
 
 document.getElementById("ounce").innerText =
-"خطا در دریافت قیمت";
+"خطا: " + e.message;
+
+}
 
 }
 
