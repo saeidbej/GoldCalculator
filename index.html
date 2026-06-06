@@ -1,3 +1,66 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Gold Trader Pro</title>
+
+<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
+
+<style>
+body{
+font-family:tahoma;
+max-width:900px;
+margin:auto;
+padding:20px;
+text-align:center;
+background:#f5f7fb;
+}
+
+.card{
+background:white;
+padding:12px;
+margin:10px 0;
+border-radius:10px;
+box-shadow:0 2px 8px rgba(0,0,0,0.08);
+}
+
+#chart{
+height:400px;
+}
+
+#price{
+font-size:24px;
+font-weight:bold;
+}
+
+#signal{
+font-size:22px;
+margin-top:10px;
+font-weight:bold;
+}
+
+.up{color:green;}
+.down{color:red;}
+</style>
+</head>
+
+<body>
+
+<h2>📊 Gold Trader Pro (Live)</h2>
+
+<div class="card">
+<div>قیمت لحظه‌ای:</div>
+<div id="price">Loading...</div>
+<div id="signal">...</div>
+</div>
+
+<div class="card">
+<div id="chart"></div>
+</div>
+
+<script>
+
 let chart = LightweightCharts.createChart(document.getElementById('chart'), {
 layout: { background: { color: '#fff' }, textColor: '#000' },
 timeScale: { timeVisible: true }
@@ -5,24 +68,24 @@ timeScale: { timeVisible: true }
 
 let candleSeries = chart.addCandlestickSeries();
 let candles = [];
+let lastPrice = 0;
 
 async function fetchGold(){
 
 try{
 
-// ✅ API واقعی و پایدارتر
 const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
 const data = await res.json();
 
 let price = data.price;
 
-// ساخت کندل واقعی
+// کندل واقعی (شبیه‌سازی بازار با داده واقعی)
 let prev = candles[candles.length - 1];
 
 let open = prev ? prev.close : price;
 let close = price;
-let high = Math.max(open, close) + Math.random()*0.3;
-let low = Math.min(open, close) - Math.random()*0.3;
+let high = Math.max(open, close) + Math.random()*0.5;
+let low = Math.min(open, close) - Math.random()*0.5;
 
 let candle = {
 time: Math.floor(Date.now()/1000),
@@ -37,19 +100,23 @@ candleSeries.setData(candles);
 // UI
 document.getElementById("price").innerText = price.toFixed(2);
 
-// MA Signal
+// سیگنال ساده (MA)
 let ma = candles.slice(-10).reduce((a,b)=>a+b.close,0)/10;
 
 if(price > ma){
-document.getElementById("signal").innerHTML = "🟢 BUY (Up trend)";
+document.getElementById("signal").innerHTML =
+"<span class='up'>🟢 BUY (Up Trend)</span>";
 }else{
-document.getElementById("signal").innerHTML = "🔴 SELL (Down trend)";
+document.getElementById("signal").innerHTML =
+"<span class='down'>🔴 SELL (Down Trend)</span>";
 }
+
+lastPrice = price;
 
 }catch(e){
 
 document.getElementById("price").innerText =
-"Error: API not responding";
+"Error loading data";
 
 console.log(e);
 
@@ -59,3 +126,8 @@ console.log(e);
 
 fetchGold();
 setInterval(fetchGold, 5000);
+
+</script>
+
+</body>
+</html>
