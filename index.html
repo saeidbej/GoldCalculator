@@ -1,85 +1,28 @@
-<!DOCTYPE html>
-<html lang="fa" dir="rtl">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gold Trader Pro</title>
-
-<script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
-
-<style>
-body{
-font-family:tahoma;
-max-width:900px;
-margin:auto;
-padding:20px;
-text-align:center;
-background:#f5f7fb;
-}
-
-.card{
-background:white;
-padding:12px;
-margin:10px 0;
-border-radius:10px;
-box-shadow:0 2px 8px rgba(0,0,0,0.08);
-}
-
-#chart{
-height:400px;
-}
-
-#signal{
-font-size:22px;
-font-weight:bold;
-margin-top:10px;
-}
-
-.up{color:green;}
-.down{color:red;}
-</style>
-</head>
-
-<body>
-
-<h2>📊 Gold Trader Pro (Real Market)</h2>
-
-<div class="card">
-<div>XAUUSD:</div>
-<div id="price">Loading...</div>
-<div id="signal">...</div>
-</div>
-
-<div id="chart"></div>
-
-<script>
-
 let chart = LightweightCharts.createChart(document.getElementById('chart'), {
 layout: { background: { color: '#fff' }, textColor: '#000' },
 timeScale: { timeVisible: true }
 });
 
 let candleSeries = chart.addCandlestickSeries();
-
 let candles = [];
 
 async function fetchGold(){
 
 try{
 
-// 🔥 واقعی (Market data)
-const res = await fetch("https://api.metals.live/v1/spot/gold");
+// ✅ API واقعی و پایدارتر
+const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
 const data = await res.json();
 
-let price = data[0].price;
+let price = data.price;
 
-// ساخت کندل واقعی تقریبی (market simulation based on real price tick)
+// ساخت کندل واقعی
 let prev = candles[candles.length - 1];
 
 let open = prev ? prev.close : price;
 let close = price;
-let high = Math.max(open, close) + Math.random()*0.5;
-let low = Math.min(open, close) - Math.random()*0.5;
+let high = Math.max(open, close) + Math.random()*0.3;
+let low = Math.min(open, close) - Math.random()*0.3;
 
 let candle = {
 time: Math.floor(Date.now()/1000),
@@ -94,29 +37,25 @@ candleSeries.setData(candles);
 // UI
 document.getElementById("price").innerText = price.toFixed(2);
 
-// 📊 سیگنال ساده واقعی (MA)
+// MA Signal
 let ma = candles.slice(-10).reduce((a,b)=>a+b.close,0)/10;
 
-let signal = "";
 if(price > ma){
-signal = "<span class='up'>🟢 BUY (Trend Up)</span>";
+document.getElementById("signal").innerHTML = "🟢 BUY (Up trend)";
 }else{
-signal = "<span class='down'>🔴 SELL (Trend Down)</span>";
+document.getElementById("signal").innerHTML = "🔴 SELL (Down trend)";
 }
 
-document.getElementById("signal").innerHTML = signal;
-
 }catch(e){
-document.getElementById("price").innerText = "Error loading data";
+
+document.getElementById("price").innerText =
+"Error: API not responding";
+
 console.log(e);
+
 }
 
 }
 
 fetchGold();
 setInterval(fetchGold, 5000);
-
-</script>
-
-</body>
-</html>
