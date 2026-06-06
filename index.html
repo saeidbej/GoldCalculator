@@ -3,18 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gold Trader Pro</title>
+<title>Gold Trader Ultimate Pro</title>
 
 <script src="https://cdn.jsdelivr.net/npm/lightweight-charts@4.1.0/dist/lightweight-charts.standalone.production.js"></script>
 
 <style>
 body{
 font-family:tahoma;
-max-width:900px;
+max-width:950px;
 margin:auto;
 padding:20px;
 text-align:center;
-background:#f5f7fb;
+background:#f4f6f8;
 }
 
 .card{
@@ -25,33 +25,70 @@ border-radius:10px;
 box-shadow:0 2px 8px rgba(0,0,0,0.08);
 }
 
-#chart{
-height:400px;
-}
-
-#price{
-font-size:24px;
-font-weight:bold;
-}
-
-#signal{
-font-size:22px;
+input{
+width:90%;
+padding:12px;
+font-size:18px;
 margin-top:10px;
-font-weight:bold;
+border-radius:8px;
+border:1px solid #ccc;
+text-align:center;
 }
 
-.up{color:green;}
-.down{color:red;}
+#result{
+font-size:32px;
+font-weight:bold;
+color:#0b57d0;
+}
+
+.row{
+display:flex;
+justify-content:space-around;
+flex-wrap:wrap;
+}
+
+.box{
+margin:10px;
+font-size:18px;
+}
+
+.up{color:green;font-weight:bold;}
+.down{color:red;font-weight:bold;}
+
+#chart{
+height:350px;
+}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Gold Trader Pro (Live)</h2>
+<h2>📊 Gold Trader Ultimate Pro</h2>
+
+<div class="card row">
+
+<div class="box">
+📊 اونس:
+<div id="ounce">...</div>
+</div>
+
+<div class="box">
+💵 دلار:
+<div id="usdShow">0</div>
+</div>
+
+<div class="box">
+🪙 مظنه:
+<div id="result">0</div>
+</div>
+
+</div>
 
 <div class="card">
-<div>قیمت لحظه‌ای:</div>
-<div id="price">Loading...</div>
+<input id="usd" type="number" placeholder="قیمت دلار آزاد (تومان)">
+</div>
+
+<div class="card">
 <div id="signal">...</div>
 </div>
 
@@ -61,31 +98,59 @@ font-weight:bold;
 
 <script>
 
+let ouncePrice = 0;
+let candles = [];
+
 let chart = LightweightCharts.createChart(document.getElementById('chart'), {
 layout: { background: { color: '#fff' }, textColor: '#000' },
 timeScale: { timeVisible: true }
 });
 
-let candleSeries = chart.addCandlestickSeries();
-let candles = [];
-let lastPrice = 0;
+let series = chart.addCandlestickSeries();
 
-async function fetchGold(){
+// EMA function
+function EMA(arr, period){
+let k = 2 / (period + 1);
+return arr.reduce((acc, val, i)=>{
+return i === 0 ? val : val * k + acc * (1 - k);
+}, arr[0] || 0);
+}
+
+let lastUpdate = 0;
+
+async function loadGold(){
+
+let now = Date.now();
+if(now - lastUpdate < 2000) return; // ضد لگ
+lastUpdate = now;
 
 try{
 
 const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
 const data = await res.json();
 
-let price = data.price;
+ouncePrice = data.price;
 
-// کندل واقعی (شبیه‌سازی بازار با داده واقعی)
-let prev = candles[candles.length - 1];
+document.getElementById("ounce").innerText =
+ouncePrice.toFixed(2);
 
-let open = prev ? prev.close : price;
-let close = price;
-let high = Math.max(open, close) + Math.random()*0.5;
-let low = Math.min(open, close) - Math.random()*0.5;
+// دلار
+let usd = parseFloat(document.getElementById("usd").value) || 0;
+document.getElementById("usdShow").innerText = usd.toLocaleString();
+
+// 🪙 فرمول اصلی
+let result = (ouncePrice * usd) / 9.5742;
+
+document.getElementById("result").innerText =
+result.toLocaleString("en-US",{maximumFractionDigits:0});
+
+// کندل واقعی بدون fake زیاد (نزدیک به tick real)
+let prev = candles[candles.length-1];
+
+let open = prev ? prev.close : ouncePrice;
+let close = ouncePrice;
+let high = Math.max(open, close);
+let low = Math.min(open, close);
 
 let candle = {
 time: Math.floor(Date.now()/1000),
@@ -93,30 +158,28 @@ open, high, low, close
 };
 
 candles.push(candle);
-if(candles.length > 100) candles.shift();
+if(candles.length > 120) candles.shift();
 
-candleSeries.setData(candles);
+series.setData(candles);
 
-// UI
-document.getElementById("price").innerText = price.toFixed(2);
+// 📊 سیگنال واقعی‌تر (EMA)
+let closes = candles.map(c=>c.close);
 
-// سیگنال ساده (MA)
-let ma = candles.slice(-10).reduce((a,b)=>a+b.close,0)/10;
+let emaFast = EMA(closes.slice(-10), 10);
+let emaSlow = EMA(closes.slice(-20), 20);
 
-if(price > ma){
+if(emaFast > emaSlow){
 document.getElementById("signal").innerHTML =
-"<span class='up'>🟢 BUY (Up Trend)</span>";
+"<span class='up'>🟢 روند صعودی (BUY)</span>";
 }else{
 document.getElementById("signal").innerHTML =
-"<span class='down'>🔴 SELL (Down Trend)</span>";
+"<span class='down'>🔴 روند نزولی (SELL)</span>";
 }
-
-lastPrice = price;
 
 }catch(e){
 
-document.getElementById("price").innerText =
-"Error loading data";
+document.getElementById("signal").innerText =
+"خطا در دریافت داده";
 
 console.log(e);
 
@@ -124,8 +187,12 @@ console.log(e);
 
 }
 
-fetchGold();
-setInterval(fetchGold, 5000);
+document.getElementById("usd").addEventListener("input", loadGold);
+
+loadGold();
+
+// آپدیت واقعی پایدار
+setInterval(loadGold, 3000);
 
 </script>
 
