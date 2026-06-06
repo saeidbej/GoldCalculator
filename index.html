@@ -3,16 +3,16 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Gold Calculator Pro+</title>
+<title>Gold Ultimate</title>
 
 <style>
 body{
 font-family:tahoma;
-max-width:600px;
+max-width:700px;
 margin:auto;
 padding:20px;
 text-align:center;
-background:#f5f7fb;
+background:#f4f6f8;
 }
 
 .card{
@@ -33,9 +33,9 @@ border:1px solid #ccc;
 }
 
 #result{
-font-size:32px;
+font-size:34px;
 font-weight:bold;
-color:#1a73e8;
+color:#0b57d0;
 margin-top:10px;
 }
 
@@ -44,18 +44,22 @@ font-size:14px;
 color:#555;
 margin-top:5px;
 }
+
+.up{color:green;font-weight:bold;}
+.down{color:red;font-weight:bold;}
 </style>
 </head>
 
 <body>
 
-<h2>📊 Gold Calculator Pro+</h2>
+<h2>💰 Gold Ultimate (Live)</h2>
 
 <div class="card">
-<div>اونس جهانی (میانگین 2 منبع):</div>
-<div id="ounce">در حال دریافت...</div>
+<div>اونس جهانی:</div>
+<div id="ounce">...</div>
 <div class="status" id="status">در حال اتصال...</div>
 <div class="status" id="time"></div>
+<div class="status" id="trend"></div>
 </div>
 
 <div class="card">
@@ -67,45 +71,62 @@ margin-top:5px;
 <div id="result">0</div>
 </div>
 
+<canvas id="chart" width="300" height="120"></canvas>
+
 <script>
 
-let prices = [];
+let ouncePrice = 0;
+let lastPrice = 0;
+let priceHistory = [];
+window.loading = false;
 
-async function fetchGold(){
+async function loadGold(){
+
+if(window.loading) return;
+window.loading = true;
 
 try{
 
-// API 1
-const res1 = await fetch("https://api.gold-api.com/price/XAU", {cache:"no-store"});
-const data1 = await res1.json();
+const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
+const data = await res.json();
 
-// API 2 (backup همان API با endpoint متفاوت احتمالی)
-const res2 = await fetch("https://api.gold-api.com/price/XAU", {cache:"no-store"});
-const data2 = await res2.json();
+ouncePrice = data.price;
 
-// جمع‌آوری قیمت‌ها
-prices = [data1.price, data2.price];
+// history
+priceHistory.push(ouncePrice);
+if(priceHistory.length > 20) priceHistory.shift();
 
-// میانگین
-let avg = prices.reduce((a,b)=>a+b,0)/prices.length;
+// UI
+document.getElementById("ounce").innerText = ouncePrice.toFixed(2);
 
-window.ouncePrice = avg;
-
-document.getElementById("ounce").innerText = avg.toFixed(2);
-
-document.getElementById("status").innerText =
-"آنلاین 🟢 | بازار فعال یا آخرین قیمت";
+document.getElementById("status").innerText = "آنلاین 🟢";
 
 document.getElementById("time").innerText =
-"آخرین بروزرسانی: " + new Date().toLocaleTimeString();
+"آخرین آپدیت: " + new Date().toLocaleTimeString();
+
+// trend
+if(lastPrice){
+if(ouncePrice > lastPrice){
+document.getElementById("trend").innerHTML = "<span class='up'>▲ در حال افزایش</span>";
+}else if(ouncePrice < lastPrice){
+document.getElementById("trend").innerHTML = "<span class='down'>▼ در حال کاهش</span>";
+}else{
+document.getElementById("trend").innerText = "ثابت";
+}
+}
+
+lastPrice = ouncePrice;
 
 calc();
+drawChart();
 
 }catch(e){
 
 document.getElementById("status").innerText =
 "خطا در دریافت قیمت";
 
+} finally {
+window.loading = false;
 }
 
 }
@@ -114,20 +135,43 @@ function calc(){
 
 let usd = parseFloat(document.getElementById("usd").value) || 0;
 
-let result = (window.ouncePrice || 0) * usd / 9.5742;
+let result = (ouncePrice * usd) / 9.5742;
 
 document.getElementById("result").innerText =
 result.toLocaleString("en-US",{maximumFractionDigits:0});
 
 }
 
-document.getElementById("usd").addEventListener("input", calc);
+// نمودار ساده
+function drawChart(){
+
+let c = document.getElementById("chart");
+let ctx = c.getContext("2d");
+
+ctx.clearRect(0,0,c.width,c.height);
+
+ctx.beginPath();
+
+for(let i=0;i<priceHistory.length;i++){
+let x = i * (c.width/20);
+let y = c.height - (priceHistory[i]-4000)*0.1;
+
+if(i===0) ctx.moveTo(x,y);
+else ctx.lineTo(x,y);
+}
+
+ctx.strokeStyle="#0b57d0";
+ctx.stroke();
+
+}
+
+document.getElementById("usd").addEventListener("input",calc);
 
 // شروع
-fetchGold();
+loadGold();
 
-// آپدیت هر 8 ثانیه
-setInterval(fetchGold, 8000);
+// ⏱ آپدیت ۱ ثانیه‌ای
+setInterval(loadGold,1000);
 
 </script>
 
