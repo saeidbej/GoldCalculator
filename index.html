@@ -73,8 +73,13 @@ height:350px;
 </div>
 
 <div class="box">
-💵 دلار:
+💵 دلار آزاد:
 <div id="usdShow">0</div>
+</div>
+
+<div class="box">
+💵 دلار فردایی:
+<div id="usdFutShow">0</div>
 </div>
 
 <div class="box">
@@ -82,10 +87,15 @@ height:350px;
 <div id="result">0</div>
 </div>
 
+<div class="box">
+🔗 منبع:
+<div id="sourceName">...</div>
+</div>
+
 </div>
 
 <div class="card">
-<input id="usd" type="number" placeholder="قیمت دلار آزاد (تومان)">
+<input id="usd" type="number" placeholder="قیمت دلخواه دلار (تومان)">
 </div>
 
 <div class="card">
@@ -97,103 +107,132 @@ height:350px;
 </div>
 
 <script>
-
 let ouncePrice = 0;
+let usdPrice = 0;
+let usdFutPrice = 0;
 let candles = [];
 
 let chart = LightweightCharts.createChart(document.getElementById('chart'), {
-layout: { background: { color: '#fff' }, textColor: '#000' },
-timeScale: { timeVisible: true }
+    layout: { background: { color: '#fff' }, textColor: '#000' },
+    timeScale: { timeVisible: true }
 });
 
 let series = chart.addCandlestickSeries();
 
-// EMA function
 function EMA(arr, period){
-let k = 2 / (period + 1);
-return arr.reduce((acc, val, i)=>{
-return i === 0 ? val : val * k + acc * (1 - k);
-}, arr[0] || 0);
+    let k = 2 / (period + 1);
+    return arr.reduce((acc, val, i)=>{
+        return i === 0 ? val : val * k + acc * (1 - k);
+    }, arr[0] || 0);
 }
 
-let lastUpdate = 0;
+// تابع دریافت اونس از چند API پشت سر هم
+async function getOunce(){
+    const sources = [
+        async () => {
+            // Gold-API اصلی
+            const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
+            const d = await res.json();
+            if(d.price) document.getElementById("sourceName").innerText = "Gold-API اصلی";
+            return Number(d.price);
+        },
+        async () => {
+            // GoldAPI.io
+            const res = await fetch("https://www.goldapi.io/api/XAU/USD",{
+                headers:{ "x-access-token":"YOUR_KEY_HERE" }
+            });
+            const d = await res.json();
+            if(d.price) document.getElementById("sourceName").innerText = "GoldAPI.io";
+            return Number(d.price);
+        },
+        async () => {
+            // Metals-API
+            const res = await fetch("https://metals-api.com/api/latest?base=USD&symbols=XAU&access_key=YOUR_KEY_HERE");
+            const d = await res.json();
+            if(d.rates && d.rates.XAU) document.getElementById("sourceName").innerText = "Metals-API";
+            return Number(d.rates.XAU);
+        },
+        async () => {
+            // TwelveData
+            const res = await fetch("https://api.twelvedata.com/price?symbol=XAU/USD&apikey=YOUR_KEY_HERE");
+            const d = await res.json();
+            if(d.price) document.getElementById("sourceName").innerText = "TwelveData";
+            return Number(d.price);
+        }
+    ];
+
+    for(const source of sources){
+        try{
+            const price = await source();
+            if(price && !isNaN(price) && price > 1000) return price;
+        }catch(err){
+            console.log("Source Failed:", err);
+        }
+    }
+
+    throw new Error("تمام منابع اونس طلا پاسخ ندادند");
+}
+
+// دریافت دلار آزاد و فردایی (مثال ساده)
+async function getUSD(){
+    try{
+        const res = await fetch("https://api.exchangerate.host/latest?base=USD&symbols=IRR",{cache:"no-store"});
+        const data = await res.json();
+        usdPrice = parseFloat(data.rates.IRR);
+        usdFutPrice = usdPrice * 1.005; // فرض مثال: 0.5٪ تفاوت فردایی
+    }catch(e){
+        console.log("خطا در دریافت دلار:", e);
+    }
+}
 
 async function loadGold(){
+    try{
+        ouncePrice = await getOunce();
+        await getUSD();
 
-let now = Date.now();
-if(now - lastUpdate < 2000) return; // ضد لگ
-lastUpdate = now;
+        document.getElementById("ounce").innerText = ouncePrice.toFixed(2);
 
-try{
+        let usdInput = parseFloat(document.getElementById("usd").value) || usdPrice;
+        document.getElementById("usdShow").innerText = usdPrice.toLocaleString();
+        document.getElementById("usdFutShow").innerText = usdFutPrice.toLocaleString();
 
-const res = await fetch("https://api.gold-api.com/price/XAU",{cache:"no-store"});
-const data = await res.json();
+        // مظنه
+        let result = (ouncePrice * usdInput) / 9.5742;
+        document.getElementById("result").innerText = result.toLocaleString("en-US",{maximumFractionDigits:0});
 
-ouncePrice = data.price;
+        // کندل
+        let prev = candles[candles.length-1];
+        let open = prev ? prev.close : ouncePrice;
+        let close = ouncePrice;
+        let high = Math.max(open, close);
+        let low = Math.min(open, close);
 
-document.getElementById("ounce").innerText =
-ouncePrice.toFixed(2);
+        let candle = {time: Math.floor(Date.now()/1000), open, high, low, close};
+        candles.push(candle);
+        if(candles.length > 120) candles.shift();
 
-// دلار
-let usd = parseFloat(document.getElementById("usd").value) || 0;
-document.getElementById("usdShow").innerText = usd.toLocaleString();
+        series.setData(candles);
 
-// 🪙 فرمول اصلی
-let result = (ouncePrice * usd) / 9.5742;
+        // سیگنال EMA
+        let closes = candles.map(c=>c.close);
+        let emaFast = EMA(closes.slice(-10),10);
+        let emaSlow = EMA(closes.slice(-20),20);
 
-document.getElementById("result").innerText =
-result.toLocaleString("en-US",{maximumFractionDigits:0});
-
-// کندل واقعی بدون fake زیاد (نزدیک به tick real)
-let prev = candles[candles.length-1];
-
-let open = prev ? prev.close : ouncePrice;
-let close = ouncePrice;
-let high = Math.max(open, close);
-let low = Math.min(open, close);
-
-let candle = {
-time: Math.floor(Date.now()/1000),
-open, high, low, close
-};
-
-candles.push(candle);
-if(candles.length > 120) candles.shift();
-
-series.setData(candles);
-
-// 📊 سیگنال واقعی‌تر (EMA)
-let closes = candles.map(c=>c.close);
-
-let emaFast = EMA(closes.slice(-10), 10);
-let emaSlow = EMA(closes.slice(-20), 20);
-
-if(emaFast > emaSlow){
-document.getElementById("signal").innerHTML =
-"<span class='up'>🟢 روند صعودی (BUY)</span>";
-}else{
-document.getElementById("signal").innerHTML =
-"<span class='down'>🔴 روند نزولی (SELL)</span>";
-}
-
-}catch(e){
-
-document.getElementById("signal").innerText =
-"خطا در دریافت داده";
-
-console.log(e);
-
-}
-
+        if(emaFast > emaSlow){
+            document.getElementById("signal").innerHTML = "<span class='up'>🟢 روند صعودی (BUY)</span>";
+        }else{
+            document.getElementById("signal").innerHTML = "<span class='down'>🔴 روند نزولی (SELL)</span>";
+        }
+    }catch(e){
+        console.log(e);
+        document.getElementById("signal").innerText = "خطا در دریافت داده";
+        document.getElementById("sourceName").innerText = "-";
+    }
 }
 
 document.getElementById("usd").addEventListener("input", loadGold);
-
 loadGold();
-
-// آپدیت واقعی پایدار
-setInterval(loadGold, 3000);
-
+setInterval(loadGold, 10000); // آپدیت هر 10 ثانیه
 </script>
 
 </body>
